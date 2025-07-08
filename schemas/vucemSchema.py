@@ -8,8 +8,8 @@ class VucemSchema(BaseModel):
     user: str
     password: str
     patente: str
+    is_active: bool
     is_importer: bool
     acuseCove: bool
     acuseedocument: bool
-    is_active: bool
 

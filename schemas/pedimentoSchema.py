@@ -5,9 +5,9 @@ from uuid import UUID
 
 class PedimentoBaseSchema(BaseModel):
     """Esquema base para pedimentos con campos comunes"""
-    aduana: str = Field(..., min_length=3, max_length=3, description="Código de aduana (3 dígitos)", regex="^[0-9]{3}$")
-    patente: str = Field(..., min_length=4, max_length=4, description="Número de patente (4 dígitos)", regex="^[0-9]{4}$")
-    pedimento: str = Field(..., min_length=7, max_length=7, description="Número de pedimento (7 dígitos)", regex="^[0-9]{7}$")
+    aduana: str = Field(..., min_length=3, max_length=3, description="Código de aduana (3 dígitos)", pattern="^[0-9]{3}$")
+    patente: str = Field(..., min_length=4, max_length=4, description="Número de patente (4 dígitos)", pattern="^[0-9]{4}$")
+    pedimento: str = Field(..., min_length=7, max_length=7, description="Número de pedimento (7 dígitos)", pattern="^[0-9]{7}$")
     
     @field_validator('aduana')
     def validate_aduana(cls, v):

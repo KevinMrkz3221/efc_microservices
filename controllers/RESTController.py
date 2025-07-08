@@ -1,9 +1,12 @@
 import requests
 import asyncio
+import logging
 from typing import List, Dict, Any
 import os
 
-from core.config import settings as SETTINGS
+from core.config import settings 
+
+logger = logging.getLogger(__name__) 
 
 class APIController:
     """
@@ -11,13 +14,13 @@ class APIController:
     """
 
     def __init__(self):
-        self.base_url = SETTINGS.API_URL # URL base de la API
+        self.base_url = settings.API_URL # URL base de la API
+    
         self.headers = {
             'Content-Type': 'application/json',
-            'Authorization': f'Token {SETTINGS.API_TOKEN}'  # Token de autenticación
+            'Authorization': f'Token {settings.API_TOKEN}'  # Token de autenticación
         }
-
-        self.timeout = 10  # Timeout para las peticiones a la API
+        self.timeout = 5  # Timeout para las peticiones a la API
 
     def _make_request(self, method, endpoint, data=None):
         """
@@ -42,29 +45,44 @@ class APIController:
         Método para obtener la lista de servicios desde la API.
         """
         return self._make_request('GET', f'customs/procesamientopedimentos/?page={page}&page_size=40&estado=1&servicio={service_type}')
+    
+    async def get_pedimento(self, pedimento_id: str) -> Dict[str, Any]:
+        """
+        Método para obtener un pedimento específico desde la API.
+        
+        Args:
+            pedimento: UUID del pedimento a consultar
+        """
+        return self._make_request('GET', f'customs/pedimentos/{pedimento_id}/')
 
-    def get_vucem_credentials(self, importador) -> Dict[str, Any]:
+    async def get_vucem_credentials(self, importador) -> Dict[str, Any]:
         """
         Método para obtener las credenciales de VUCEM desde la API.
         """
-        return self._make_request('GET', f'vucem/vucem/?usuario={importador}')
+        return await self._make_request_async('GET', f'vucem/vucem/?usuario={importador}')
     
-    def post_pedimento_service(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def post_pedimento_service(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Método para crear un nuevo servicio de pedimento en la API.
         
         Args:
             data: Diccionario con los datos del servicio a crear
         """
-        return self._make_request('POST', 'customs/procesamientopedimentos/', data=data)
+        return await self._make_request_async('POST', 'customs/procesamientopedimentos/', data=data)
     
-    def put_pedimento_service(self, service_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def put_pedimento_service(self, service_id: int, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Método para actualizar un servicio de pedimento en la API.
         """
-        return self._make_request('PUT', f'customs/procesamientopedimentos/{service_id}/', data=data)
+        return await self._make_request_async('PUT', f'customs/procesamientopedimentos/{service_id}/', data=data)
 
-    def post_document(self, soap_response, organizacion: str, pedimento: str, file_name: str = None) -> Dict[str, Any]:
+    async def put_pedimento(self, pedimento_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Método para actualizar un pedimento en la API.
+        """
+        return await self._make_request_async('PUT', f'customs/pedimentos/{pedimento_id}/', data=data)
+
+    async def post_document(self, soap_response, organizacion: str, pedimento: str, file_name: str = None) -> Dict[str, Any]:
         """
         Método para enviar una respuesta SOAP como documento archivo a la API.
         
@@ -85,7 +103,7 @@ class APIController:
             # Generar nombre de archivo si no se especifica
             if not file_name:
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                file_name = f"soap_response_{timestamp}.xml"
+                file_name = f"pedimento_{pedimento}.xml"
             
             # Asegurar que termine en .xml
             if not file_name.endswith('.xml'):
@@ -106,7 +124,7 @@ class APIController:
             
             # Preparar headers para multipart/form-data (sin Content-Type)
             headers = {
-                'Authorization': f'Token {SETTINGS.API_TOKEN}'
+                'Authorization': f'Token {settings.API_TOKEN}'
             }
             
             # Calcular tamaño del archivo
@@ -124,18 +142,20 @@ class APIController:
             # Subir archivo
             url = f"{self.base_url}/record/documents/"
             
-            with open(temp_file_path, 'rb') as file:
-                files = {
-                    'archivo': (file_name, file, 'application/xml')
-                }
-                
-                response = requests.request(
-                    'POST',
-                    url,
-                    data=document_data,  # Datos van como form-data
-                    files=files,         # Archivo va como multipart
-                    headers=headers
-                )
+            # Usar httpx AsyncClient para la petición asíncrona
+            import httpx
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                with open(temp_file_path, 'rb') as file:
+                    files = {
+                        'archivo': (file_name, file.read(), 'application/xml')
+                    }
+                    
+                    response = await client.post(
+                        url,
+                        data=document_data,  # Datos van como form-data
+                        files=files,         # Archivo va como multipart
+                        headers=headers
+                    )
             
             # Limpiar archivo temporal
             os.unlink(temp_file_path)
@@ -153,3 +173,46 @@ class APIController:
                 os.unlink(temp_file_path)
             return None
 
+    async def _make_request_async(self, method: str, endpoint: str, data=None):
+        """
+        Método asíncrono para hacer peticiones a la API usando httpx.
+        """
+        import httpx
+        
+        url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+        
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                logger.info(f"Haciendo petición {method} a {url}")
+                
+                if method.upper() == 'GET':
+                    response = await client.get(url, headers=self.headers)
+                elif method.upper() == 'POST':
+                    response = await client.post(url, json=data, headers=self.headers)
+                elif method.upper() == 'PUT':
+                    response = await client.put(url, json=data, headers=self.headers)
+                elif method.upper() == 'DELETE':
+                    response = await client.delete(url, headers=self.headers)
+                else:
+                    raise ValueError(f"Método HTTP no soportado: {method}")
+
+                response.raise_for_status()
+                logger.info(f"Respuesta exitosa: {response.status_code}")
+                
+                result = response.json() if response.content else {}
+                return result
+                
+        except httpx.TimeoutException as e:
+            logger.error(f"Timeout en petición a {url}: {e}")
+            return None
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Error HTTP {e.response.status_code} en {url}: {e}")
+
+            return None
+        except Exception as e:
+            logger.error(f"Error inesperado en petición a {url}: {e}")
+            import traceback
+            return None
+
+
+rest_controller = APIController()  # Instancia global del controlador REST
