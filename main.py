@@ -5,10 +5,10 @@ from api.api_v1.api import api_router
 def create_application() -> FastAPI:
     """Función factory para crear la aplicación FastAPI"""
     application = FastAPI(
-        title=settings.app_name,
+        title=settings.APP_NAME,
         description="EFC Microservice - Un microservicio profesional por AduanaSoft",
-        version=settings.app_version,
-        debug=settings.debug,
+        version=settings.APP_VERSION,
+        debug=settings.DEBUG,
     )
     
 

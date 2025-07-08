@@ -8,15 +8,15 @@ async def health_check():
     """Endpoint para verificar el estado del servicio"""
     return {
         "status": "healthy",
-        "service": settings.app_name,
-        "version": settings.app_version
+        "service": settings.APP_NAME,
+        "version": settings.APP_VERSION
     }
 
 @router.get("/")
 async def root():
     """Endpoint raíz del microservicio"""
     return {
-        "message": f"Bienvenido a {settings.app_name}",
-        "version": settings.app_version,
+        "message": f"Bienvenido a {settings.APP_NAME}",
+        "version": settings.APP_VERSION,
         "docs": "/docs"
     }

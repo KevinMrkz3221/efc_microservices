@@ -1,4 +1,4 @@
-from core.config import settings as SETTINGS
+from core.config import settings 
 from dataclasses import dataclass
 import requests
 import httpx
@@ -11,14 +11,14 @@ class SOAPController:
     """
 
     def __init__(self):
-        self.base_url = SETTINGS.SOAP_SERVICE_URL
-        self.timeout = SETTINGS.TIMEOUT  # Timeout por default
+        self.base_url = settings.SOAP_SERVICE_URL
+        self.timeout = settings.TIMEOUT  # Timeout por default
 
     def make_request(self, endpoint, data=None, headers=None, max_retries=5):
         intento = 0
-        while intento < SETTINGS.MAX_RETRIES:
+        while intento < settings.MAX_RETRIES:
             try:
-                with httpx.Client(verify=SETTINGS.context, timeout=self.timeout) as client:
+                with httpx.Client(verify=settings.context, timeout=self.timeout) as client:
                     content = data.encode('utf-8') if data else None
                     response = client.post(
                         f"{self.base_url}/{endpoint}",
@@ -30,8 +30,11 @@ class SOAPController:
             except Exception as e:
                 intento += 1
                 wait_time = 0
-                print(f"[{endpoint}] Error intento {intento}: {e}. Reintentando en {SETTINGS.WAIT_TIME}s...")
-                time.sleep(SETTINGS.WAIT_TIME)
+                print(f"[{endpoint}] Error intento {intento}: {e}. Reintentando en {settings.WAIT_TIME}s...")
+                time.sleep(settings.WAIT_TIME)
 
-        print(f"[{endpoint}] Fallo tras {SETTINGS.MAX_RETRIES} intentos.")
+        print(f"[{endpoint}] Fallo tras {settings.MAX_RETRIES} intentos.")
         return None
+
+
+soap_controller = SOAPController()  # Instancia global del controlador SOAP
