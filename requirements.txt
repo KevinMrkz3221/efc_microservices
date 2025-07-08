@@ -5,6 +5,8 @@ charset-normalizer==3.4.2
 click==8.2.1
 fastapi==0.116.0
 h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
 idna==3.10
 pydantic==2.11.7
 pydantic-settings==2.10.1
@@ -17,5 +19,3 @@ typing-inspection==0.4.1
 typing_extensions==4.14.1
 urllib3==2.5.0
 uvicorn==0.35.0
-httpx
-requests
