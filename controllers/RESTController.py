@@ -3,7 +3,7 @@ import asyncio
 import logging
 from typing import List, Dict, Any
 import os
-
+import httpx
 from core.config import settings 
 
 logger = logging.getLogger(__name__) 
@@ -173,14 +173,22 @@ class APIController:
                 os.unlink(temp_file_path)
             return None
 
+    async def post_edocument(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Método para enviar un documento digitalizado a la API.
+        
+        Args:
+            data: Diccionario con los datos del documento a enviar
+        """
+        return await self._make_request_async('POST', 'customs/edocuments/', data=data)
+
     async def _make_request_async(self, method: str, endpoint: str, data=None):
         """
         Método asíncrono para hacer peticiones a la API usando httpx.
         """
-        import httpx
+        
         
         url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
-        
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 logger.info(f"Haciendo petición {method} a {url}")

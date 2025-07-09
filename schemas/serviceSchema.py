@@ -24,3 +24,13 @@ class ServiceBaseSchema(BaseModel):
             raise ValueError('Los IDs numéricos deben ser números positivos')
         return v
     
+    
+class ServiceUpdateRequest(ServiceBaseSchema):
+    """Esquema para actualizar un servicio"""
+    id: int = Field(..., description="ID del servicio a actualizar")
+    
+    @field_validator('id')
+    def validate_id(cls, v):
+        if v is None or v < 0:
+            raise ValueError('El ID debe ser un número positivo')
+        return v

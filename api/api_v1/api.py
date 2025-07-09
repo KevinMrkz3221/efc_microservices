@@ -8,11 +8,9 @@ from api.api_v1.endpoints import (
     services
 )
 
-
 api_router = APIRouter()
 
 # Incluir routers de endpoints
 api_router.include_router(health.router, tags=["health"])
 api_router.include_router(pedimentos.router, tags=["pedimentos"])
-api_router.include_router(services.router, tags=["services"])
 

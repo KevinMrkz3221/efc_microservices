@@ -4,8 +4,12 @@ from controllers.RESTController import rest_controller
 from typing import Dict, Any
 import xml.etree.ElementTree as ET
 
+from schemas.serviceSchema import ServiceBaseSchema
+
 
 logger = logging.getLogger(__name__)
+
+from controllers.XMLController import xml_controller
 
 
 def validate_pedimento_data(response_service: Dict[str, Any], credenciales: Dict[str, Any]) -> tuple:
@@ -41,54 +45,6 @@ def validate_pedimento_data(response_service: Dict[str, Any], credenciales: Dict
         raise HTTPException(status_code=400, detail="Datos del pedimento incompletos")
     
     return username, password, aduana, patente, pedimento
-
-def extract_xml_data(xml_content: str):
-    """
-    Método para extraer datos específicos del XML.
-    
-    Args:
-        xml_content: Contenido del XML como string.
-    
-    Returns:
-        Diccionario con los datos extraídos.
-    """
-    try:
-        root = ET.fromstring(xml_content)
-        namespaces = {
-            'ns2': 'http://www.ventanillaunica.gob.mx/pedimentos/ws/oxml/consultarpedimentocompleto',
-        }
-        
-        # Extraer datos con manejo de errores individual
-        data = {}
-        
-        # Número de operación
-        numero_operacion = root.find('.//ns2:numeroOperacion', namespaces)
-        data['numero_operacion'] = numero_operacion.text if numero_operacion is not None else None
-        
-        # Pedimento
-        pedimento = root.find('.//ns2:pedimento/ns2:pedimento', namespaces)
-        data['pedimento'] = pedimento.text if pedimento is not None else None
-        
-        # CURP Apoderado
-        curp_apoderado = root.find('.//ns2:curpApoderadomandatario', namespaces)
-        data['curp_apoderado'] = curp_apoderado.text if curp_apoderado is not None else None
-        
-        # RFC Agente Aduanal
-        agente_aduanal = root.find('.//ns2:rfcAgenteAduanalSocFactura', namespaces)
-        data['agente_aduanal'] = agente_aduanal.text if agente_aduanal is not None else None
-        
-        # Verificar que se extrajeron los datos esenciales
-        if not any([data['numero_operacion'], data['pedimento'], data['curp_apoderado'], data['agente_aduanal']]):
-            return {}
-        
-        return data
-        
-    except ET.ParseError as e:
-        print(f"Error al parsear el XML: {e}")
-        return {}
-    except Exception as e:
-        print(f"Error inesperado al extraer datos del XML: {e}")
-        return {}
 
 def soap_error(soap_response):
     """
@@ -155,7 +111,7 @@ async def get_soap_pedimento_completo(credenciales, response_service, soap_contr
         if (soap_response) and (not soap_error(soap_response)):
             logger.info(f"Petición SOAP exitosa - Status: {soap_response.status_code}")
             
-            data = extract_xml_data(soap_response.text)
+            data = xml_controller.extract_data(soap_response.text)
             # Enviar el documento XML como respuesta
             document_response = await rest_controller.post_document(
                 soap_response=soap_response,
@@ -184,5 +140,4 @@ async def get_soap_pedimento_completo(credenciales, response_service, soap_contr
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error interno al procesar pedimento completo: {str(e)}")
-
 
