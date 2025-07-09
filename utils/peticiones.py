@@ -39,12 +39,13 @@ def validate_pedimento_data(response_service: Dict[str, Any], credenciales: Dict
     aduana = pedimento_data.get('aduana')
     patente = pedimento_data.get('patente') 
     pedimento = pedimento_data.get('pedimento')
+    numero_operacion = pedimento_data.get('numero_operacion')
     
     if not all([aduana, patente, pedimento]):
         logger.error(f"Datos del pedimento incompletos - Aduana: {aduana}, Patente: {patente}, Pedimento: {pedimento}")
         raise HTTPException(status_code=400, detail="Datos del pedimento incompletos")
     
-    return username, password, aduana, patente, pedimento
+    return username, password, aduana, patente, pedimento, numero_operacion
 
 def soap_error(soap_response):
     """
@@ -141,3 +142,156 @@ async def get_soap_pedimento_completo(credenciales, response_service, soap_contr
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error interno al procesar pedimento completo: {str(e)}")
 
+
+async def get_soap_remesas(credenciales, response_service, soap_controller):
+    """
+    Procesa la petición SOAP para obtener remesas y guarda el documento.
+    
+    Args:
+        credenciales: Diccionario con credenciales VUCEM (usuario, password)
+        response_service: Respuesta del servicio con datos del pedimento
+        soap_controller: Instancia del controlador SOAP
+        
+    Returns:
+        dict: Respuesta con el servicio, respuesta SOAP y documento guardado
+        
+    Raises:
+        HTTPException: Si hay errores en la petición SOAP o al guardar el documento
+    """
+    try:
+        # Extraer credenciales
+        username, password, aduana, patente, pedimento, numero_operacion = validate_pedimento_data(response_service, credenciales)
+
+        logger.info(f"Datos para SOAP - Usuario: {username}, Aduana: {aduana}, Patente: {patente}, Pedimento: {pedimento}, Numero Operacion: {numero_operacion}")
+        
+        # Generar template SOAP
+        soap_xml = soap_controller.generate_remesas_template(
+            username=username,
+            password=password,
+            aduana=aduana,
+            patente=patente,
+            pedimento=pedimento,
+            numero_operacion=numero_operacion
+        )
+
+        # Realizar petición SOAP
+        logger.info("Realizando petición SOAP...")
+        
+        # Headers específicos para este servicio SOAP
+        soap_headers = {
+            'Content-Type': 'text/xml; charset=utf-8'
+        }
+        
+        soap_response = await soap_controller.make_request_async(
+            "ventanilla-ws-pedimentos/ConsultarRemesasService?wsdl", 
+            data=soap_xml,
+            headers=soap_headers
+        )
+
+
+
+        if (soap_response) and (not soap_error(soap_response)):
+            logger.info(f"Petición SOAP exitosa - Status: {soap_response.status_code}")
+            
+            # data = xml_controller.extract_data(soap_response.text)
+            # # Enviar el documento XML como respuesta
+            document_response = await rest_controller.post_document(
+                soap_response=soap_response,
+                organizacion=response_service['organizacion'],
+                pedimento=response_service['pedimento']['id']
+            )
+
+
+            return {
+                "servicio": response_service,
+                "documento": document_response
+            }
+
+        else:
+            logger.error("Error en petición SOAP")
+            raise HTTPException(status_code=500, detail="Error en la petición SOAP al servicio VUCEM")
+    except HTTPException:
+        # Re-lanzar HTTPExceptions sin modificar
+        raise
+    except Exception as e:
+        logger.error(f"Error inesperado en get_remesas: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error interno al procesar remesas: {str(e)}")
+
+async def get_soap_partidas(credenciales, response_service, soap_controller, partida):
+    """
+    Procesa la petición SOAP para obtener partidas de un pedimento y guarda el documento.
+    
+    Args:
+        credenciales: Diccionario con credenciales VUCEM (usuario, password)
+        response_service: Respuesta del servicio con datos del pedimento
+        soap_controller: Instancia del controlador SOAP
+        partida: Número de partida a consultar
+        
+    Returns:
+        dict: Respuesta con el servicio, respuesta SOAP y documento guardado
+        
+    Raises:
+        HTTPException: Si hay errores en la petición SOAP o al guardar el documento
+    """
+    try:
+        # Extraer credenciales
+        username, password, aduana, patente, pedimento, numero_operacion = validate_pedimento_data(response_service, credenciales)
+
+        logger.info(f"Datos para SOAP - Usuario: {username}, Aduana: {aduana}, Patente: {patente}, Pedimento: {pedimento}, Numero Operacion: {numero_operacion}, Partida: {partida}")
+        
+        # Generar template SOAP
+        soap_xml = soap_controller.generate_partidas_template(
+            username=username,
+            password=password,
+            aduana=aduana,
+            patente=patente,
+            pedimento=pedimento,
+            numero_operacion=numero_operacion,
+            partida=partida
+        )
+
+        # Realizar petición SOAP
+        logger.info("Realizando petición SOAP...")
+        
+        # Headers específicos para este servicio SOAP
+        soap_headers = {
+            'Content-Type': 'text/xml; charset=utf-8'
+        }
+        
+        soap_response = await soap_controller.make_request_async(
+            "ventanilla-ws-pedimentos/ConsultarPartidaService?wsdl", 
+            data=soap_xml,
+            headers=soap_headers
+        )
+
+
+        if (soap_response) and (not soap_error(soap_response)):
+            logger.info(f"Petición SOAP exitosa - Status: {soap_response.status_code}")
+            
+            # Enviar el documento XML como respuesta
+            document_response = await rest_controller.post_document(
+                soap_response=soap_response,
+                organizacion=response_service['organizacion'],
+                pedimento=response_service['pedimento']['id']
+            )
+
+
+
+            return {
+                "servicio": response_service, 
+                "documento": document_response
+
+            }
+        else:
+            logger.error("Error en petición SOAP")
+            raise HTTPException(status_code=500, detail="Error en la petición SOAP al servicio VUCEM")
+    except HTTPException:
+        # Re-lanzar HTTPExceptions sin modificar
+        raise
+    except Exception as e:
+        logger.error(f"Error inesperado en get_partidas: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error interno al procesar partidas: {str(e)}")

@@ -40,11 +40,11 @@ class APIController:
                 print(f"Contenido del error: {e.response.text}")
             return None
 
-    def get_pedimento_services(self, page, service_type=3) -> List[Dict[str, Any]]:
+    async def get_pedimento_services(self, pedimento, service_type=3) -> List[Dict[str, Any]]:
         """
         Método para obtener la lista de servicios desde la API.
         """
-        return self._make_request('GET', f'customs/procesamientopedimentos/?page={page}&page_size=40&estado=1&servicio={service_type}')
+        return await self._make_request_async('GET', f'customs/procesamientopedimentos/?pedimento={pedimento}&estado=1&servicio={service_type}')
     
     async def get_pedimento(self, pedimento_id: str) -> Dict[str, Any]:
         """

@@ -1,12 +1,12 @@
 from fastapi import APIRouter, HTTPException
 from schemas.pedimentoSchema import PedimentoRequest
-from schemas.serviceSchema import ServiceBaseSchema
+from schemas.serviceSchema import ServiceBaseSchema, ServiceRemesaSchema
 import asyncio
 import logging
 import traceback
 from controllers.RESTController import rest_controller
 from controllers.SOAPController import soap_controller
-from utils.peticiones import get_soap_pedimento_completo
+from utils.peticiones import get_soap_pedimento_completo, get_soap_remesas, get_soap_partidas
 from fastapi.responses import JSONResponse
 from core.config import settings
 
@@ -184,7 +184,36 @@ async def get_pedimento_completo(request: ServiceBaseSchema):
             # No fallar todo el proceso por error en e-documents
             get_pedimento_completo_response['edocuments'] = []
             get_pedimento_completo_response['edocuments_error'] = str(e)
-         
+        # Crea servicios para remesas, estado del pedimento, coves y edocument
+        try:
+            new_service = {
+                "pedimento": response_service['pedimento']['id'],
+                "organizacion": response_service['organizacion'],
+                "estado": ESTADO_CREADO,
+                "tipo_procesamiento": 2,
+                "servicio": 1
+            }
+            response_service_1 = await rest_controller.post_pedimento_service(new_service)
+            new_service['servicio'] = 4
+            response_service_4 = await rest_controller.post_pedimento_service(new_service)
+            new_service['servicio'] = 5
+            response_service_5 = await rest_controller.post_pedimento_service(new_service)
+            new_service['servicio'] = 6
+            response_service_6 = await rest_controller.post_pedimento_service(new_service)
+            new_service['servicio'] = 7
+            response_service_7 = await rest_controller.post_pedimento_service(new_service)
+            get_pedimento_completo_response['servicios_adicionales'] = {
+                "servicio_1": response_service_1['id'],
+                "servicio_4": response_service_4['id'],
+                "servicio_5": response_service_5['id'],
+                "servicio_6": response_service_6['id'],
+                "servicio_7": response_service_7['id']
+            }
+            logger.info("Servicios adicionales creados exitosamente")
+        except Exception as e:
+            logger.error(f"Error al crear servicios adicionales: {e}")
+            # No fallar todo el proceso por error en servicios adicionales
+            get_pedimento_completo_response['servicios_adicionales_error'] = str(e)
         return JSONResponse(
             content=get_pedimento_completo_response,
             status_code=200
@@ -207,9 +236,85 @@ async def get_pedimento_completo(request: ServiceBaseSchema):
         
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
-@router.post("/pedimentos/remesas")
-async def get_remesas(request: PedimentoRequest):
-    pass
+@router.post("/services/remesas")
+async def get_remesas(request: ServiceRemesaSchema):
+    request_data = request.model_dump()
+
+    if not request_data.get('pedimento'):
+        raise HTTPException(status_code=400, detail="ID del pedimento es requerido")
+    if not request_data.get('organizacion'):
+        raise HTTPException(status_code=400, detail="ID de la organización es requerido")
+
+    try:
+        response_service = await rest_controller.get_pedimento_services(request_data.get('pedimento'), service_type=5)
+    except Exception as e:
+        logger.error(f"Error al obtener servicios de remesas: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener servicios de remesas")
+
+    try:
+        response_credentials = await rest_controller.get_vucem_credentials(
+            response_service[0].get('pedimento', {}).get('contribuyente', '')
+        )
+    except Exception as e:
+        logger.error(f"Error al obtener credenciales VUCEM: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener credenciales VUCEM")
+    
+    if not response_service or not response_credentials:
+        raise HTTPException(status_code=500, detail="Error al obtener servicios de remesas o credenciales VUCEM")
+
+    logger.info(f"Servicios de remesas obtenidos exitosamente: {response_service}")
+
+
+    soap_response = await get_soap_remesas(
+        credenciales=response_credentials[0],
+        response_service=response_service[0],
+        soap_controller=soap_controller
+    )
+
+
+
+
+    
+    
+    return soap_response
+
+@router.post("/services/partidas")
+async def get_partidas(request: ServiceRemesaSchema):
+    request_data = request.model_dump()
+
+    if not request_data.get('pedimento'):
+        raise HTTPException(status_code=400, detail="ID del pedimento es requerido")
+    if not request_data.get('organizacion'):
+        raise HTTPException(status_code=400, detail="ID de la organización es requerido")
+
+    try:
+        response_service = await rest_controller.get_pedimento_services(request_data.get('pedimento'), service_type=4)
+    except Exception as e:
+        logger.error(f"Error al obtener servicios de partidas: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener servicios de partidas")
+
+    
+    try:
+        response_credentials = await rest_controller.get_vucem_credentials(
+            response_service[0].get('pedimento', {}).get('contribuyente', '')
+        )
+    except Exception as e:
+        logger.error(f"Error al obtener credenciales VUCEM: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener credenciales VUCEM")
+
+    partidas = []
+    if response_service[0]['pedimento']['numero_partidas'] > 0:
+        for partida in range(1, response_service[0]['pedimento']['numero_partidas'] + 1):
+            procesado = await get_soap_partidas(
+                credenciales=response_credentials[0],
+                response_service=response_service[0],
+                soap_controller=soap_controller,
+                partida=str(partida)
+            )
+            partidas.append(partida)
+    
+    response_service[0]['partidas'] = partidas
+    return response_service
 
 @router.post("/pedimentos/estado_pedimento")
 async def get_estado_pedimento(request: PedimentoRequest):

@@ -34,3 +34,15 @@ class ServiceUpdateRequest(ServiceBaseSchema):
         if v is None or v < 0:
             raise ValueError('El ID debe ser un número positivo')
         return v
+
+
+class ServiceRemesaSchema(BaseModel):
+    """Esquema para remesas de servicios"""
+    organizacion: str = Field(..., description="ID de la organización")
+    pedimento: str = Field(..., description="ID del pedimento")
+    
+    @field_validator('organizacion', 'pedimento')
+    def validate_string_fields(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Los campos de texto no pueden estar vacíos')
+        return v.strip()

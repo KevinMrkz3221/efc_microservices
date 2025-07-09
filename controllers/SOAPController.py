@@ -71,6 +71,45 @@ class SOAPController:
         print(f"[{endpoint}] Fallo tras {settings.MAX_RETRIES} intentos.")
         return None
 
+    def generate_remesas_template(self, username: str, password: str, aduana: str, patente: str, numero_operacion: str, pedimento: str) -> str:
+        """
+        Genera el template SOAP para consultar remesas
+        
+        Args:
+            username: Usuario de VUCEM
+            password: Contraseña de VUCEM  
+            aduana: Código de aduana
+            patente: Número de patente
+            
+        Returns:
+            str: Template SOAP XML completo
+        """
+        soap_template = f'''
+        <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+        xmlns:con="http://www.ventanillaunica.gob.mx/pedimentos/ws/oxml/consultarremesas"
+        xmlns:com="http://www.ventanillaunica.gob.mx/pedimentos/ws/oxml/comunes">
+        <soapenv:Header>
+                <wsse:Security soapenv:mustUnderstand="1"
+                        xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+                        <wsse:UsernameToken>
+                                <wsse:Username>{username}</wsse:Username>
+                                <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">{password}</wsse:Password>
+                        </wsse:UsernameToken>
+                </wsse:Security>
+        </soapenv:Header>
+        <soapenv:Body>
+                <con:consultarRemesasPeticion>
+                        <con:numeroOperacion>{numero_operacion}</con:numeroOperacion>
+                        <con:peticion>
+                                <com:aduana>{aduana}</com:aduana>
+                                <com:patente>{patente}</com:patente>
+                                <com:pedimento>{pedimento}</com:pedimento>
+                        </con:peticion>
+                </con:consultarRemesasPeticion>
+        </soapenv:Body>
+        </soapenv:Envelope>'''
+        return soap_template
+
     def generate_pedimento_completo_template(self, username: str, password: str, aduana: str, patente: str, pedimento: str) -> str:
         """
         Genera el template SOAP para consultar pedimento completo
@@ -86,30 +125,69 @@ class SOAPController:
             str: Template SOAP XML completo
         """
         soap_template = f'''<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-   xmlns:con="http://www.ventanillaunica.gob.mx/pedimentos/ws/oxml/consultarpedimentocompleto"
-   xmlns:com="http://www.ventanillaunica.gob.mx/pedimentos/ws/oxml/comunes">
-   <soapenv:Header>
-      <wsse:Security soapenv:mustUnderstand="1"
-         xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
-         <wsse:UsernameToken>
-            <wsse:Username>{username}</wsse:Username>
-            <wsse:Password
-               Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">{password}</wsse:Password>
-         </wsse:UsernameToken>
-      </wsse:Security>
-   </soapenv:Header>
-   <soapenv:Body>
-      <con:consultarPedimentoCompletoPeticion>
-         <con:peticion>
-            <com:aduana>{aduana}</com:aduana>
-            <com:patente>{patente}</com:patente>
-            <com:pedimento>{pedimento}</com:pedimento>
-         </con:peticion>
-      </con:consultarPedimentoCompletoPeticion>
-   </soapenv:Body>
-</soapenv:Envelope>'''
+        xmlns:con="http://www.ventanillaunica.gob.mx/pedimentos/ws/oxml/consultarpedimentocompleto"
+        xmlns:com="http://www.ventanillaunica.gob.mx/pedimentos/ws/oxml/comunes">
+        <soapenv:Header>
+            <wsse:Security soapenv:mustUnderstand="1"
+                xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+                <wsse:UsernameToken>
+                    <wsse:Username>{username}</wsse:Username>
+                    <wsse:Password
+                    Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">{password}</wsse:Password>
+                </wsse:UsernameToken>
+            </wsse:Security>
+        </soapenv:Header>
+        <soapenv:Body>
+            <con:consultarPedimentoCompletoPeticion>
+                <con:peticion>
+                    <com:aduana>{aduana}</com:aduana>
+                    <com:patente>{patente}</com:patente>
+                    <com:pedimento>{pedimento}</com:pedimento>
+                </con:peticion>
+            </con:consultarPedimentoCompletoPeticion>
+        </soapenv:Body>
+        </soapenv:Envelope>'''
         
         return soap_template
 
+    def generate_partidas_template(self, username: str, password: str, aduana: str, patente: str, pedimento: str, numero_operacion: str, partida: str) -> str:
+        """
+        Genera el template SOAP para consultar partidas de un pedimento
+        
+        Args:
+            username: Usuario de VUCEM
+            password: Contraseña de VUCEM  
+            aduana: Código de aduana
+            patente: Número de patente
+            pedimento: Número de pedimento
+            
+        Returns:
+            str: Template SOAP XML completo
+        """
+        soap_template = f'''
+        <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:con="http://www.ventanillaunica.gob.mx/pedimentos/ws/oxml/consultarpartida" xmlns:com="http://www.ventanillaunica.gob.mx/pedimentos/ws/oxml/comunes">
+        <soapenv:Header>
+        <wsse:Security soapenv:mustUnderstand="1" xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+                <wsse:UsernameToken>
+                    <wsse:Username>{username}</wsse:Username>
+                    <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">{password}</wsse:Password>
+                </wsse:UsernameToken>
+        </wsse:Security>
+        </soapenv:Header>   
+        <soapenv:Body>
+        <con:consultarPartidaPeticion>
+            <con:peticion>
+                <com:aduana>{aduana}</com:aduana>
+                <com:patente>{patente}</com:patente>
+                <com:pedimento>{pedimento}</com:pedimento>
+                <con:numeroOperacion>{numero_operacion}</con:numeroOperacion>
+                <con:numeroPartida>{partida}</con:numeroPartida>
+            </con:peticion>
+        </con:consultarPartidaPeticion>
+        </soapenv:Body>
+        </soapenv:Envelope>
+        '''
+        
+        return soap_template
 
 soap_controller = SOAPController()  # Instancia global del controlador SOAP
