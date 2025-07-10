@@ -190,4 +190,82 @@ class SOAPController:
         
         return soap_template
 
+    def generate_acuse_template(self, username: str, password: str, idEDocument: str) -> str:
+        soap_template = f'''
+        <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:oxml="http://www.ventanillaunica.gob.mx/consulta/acuses/oxml">
+            <soapenv:Header>
+                <wsse:Security soapenv:mustUnderstand="1" xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+                    <wsse:UsernameToken>
+                        <wsse:Username>{username}</wsse:Username>
+                        <wsse:Password Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">{password}</wsse:Password>
+                    </wsse:UsernameToken>
+                </wsse:Security>
+            </soapenv:Header>
+            <soapenv:Body>
+                <oxml:consultaAcusesPeticion>
+                    <idEdocument>{idEDocument}</idEdocument>
+                </oxml:consultaAcusesPeticion>
+            </soapenv:Body>
+        </soapenv:Envelope>
+        '''
+        return soap_template
+
+    def generate_estado_pedimento_template(self, username: str, password: str, aduana: str, patente: str, pedimento: str, numero_operacion: str) -> str:
+        soap_template = f'''
+        <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+        xmlns:con="http://www.ventanillaunica.gob.mx/pedimentos/ws/oxml/consultarestadopedimentos"
+        xmlns:com="http://www.ventanillaunica.gob.mx/pedimentos/ws/oxml/comunes">
+        <soapenv:Header>
+            <wsse:Security soapenv:mustUnderstand="1"
+                xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
+                <wsse:UsernameToken>
+                    <wsse:Username>{username}</wsse:Username>
+                    <wsse:Password
+                    Type="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-username-token-profile-1.0#PasswordText">{password}</wsse:Password>
+                </wsse:UsernameToken>
+            </wsse:Security>
+        </soapenv:Header>
+        <soapenv:Body>
+            <con:consultarEstadoPedimentosPeticion>
+                <con:numeroOperacion>{numero_operacion}</con:numeroOperacion>
+                <con:peticion>
+                    <com:aduana>{aduana}</com:aduana>
+                    <com:patente>{patente}</com:patente>
+                    <com:pedimento>{pedimento}</com:pedimento>
+                </con:peticion>
+            </con:consultarEstadoPedimentosPeticion>
+        </soapenv:Body>
+        </soapenv:Envelope>
+        '''
+        return soap_template
+
+    def generate_edocument_template(self, username: str, password: str, idEDocument: str) -> str:
+        """
+        Genera el template SOAP para consultar un EDocument específico
+        
+        Args:
+            username: Usuario de VUCEM
+            password: Contraseña de VUCEM  
+            idEDocument: ID del EDocument
+            
+        Returns:
+            str: Template SOAP XML completo
+        """
+        soap_template = f'''
+        <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+        xmlns:tem="http://tempuri.org/">
+        <soapenv:Header>
+            <tem:UserName>{username}</tem:UserName>
+            <tem:Password>{password}</tem:Password>
+        </soapenv:Header>
+        <soapenv:Body>
+            <tem:DocumentoIn>
+                <tem:Edocument>{idEDocument}</tem:Edocument>
+                <tem:IsCertificado>1</tem:IsCertificado>
+            </tem:DocumentoIn>
+        </soapenv:Body>
+        </soapenv:Envelope>
+        '''
+        return soap_template
+
 soap_controller = SOAPController()  # Instancia global del controlador SOAP

@@ -6,7 +6,7 @@ import logging
 import traceback
 from controllers.RESTController import rest_controller
 from controllers.SOAPController import soap_controller
-from utils.peticiones import get_soap_pedimento_completo, get_soap_remesas, get_soap_partidas
+from utils.peticiones import get_soap_pedimento_completo, get_soap_remesas, get_soap_partidas, get_soap_acuse
 from fastapi.responses import JSONResponse
 from core.config import settings
 
@@ -77,7 +77,59 @@ async def _update_service_status(service_id: int, estado: int, response_service:
     except Exception as e:
         logger.error(f"Error al actualizar estado del servicio: {e}")
 
-@router.post("/services/pedimento_completo")
+@router.post("/pedimentos/estado_pedimento")# Sin testear
+async def get_estado_pedimento(request: ServiceBaseSchema):
+    request_data = request.model_dump()
+    
+    try:
+        response_service = await rest_controller.get_pedimento_services(request_data.get('pedimento'), service_type=6)
+    except Exception as e:
+        logger.error(f"Error al obtener servicios de remesas: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener servicios de Estado de Pedimento")
+
+    response_update_service = rest_controller.put_pedimento_service(
+        service_id=response_service[0]['id'],
+        data={
+            "estado": ESTADO_EN_PROCESO,
+            "pedimento": response_service[0]['pedimento']['id'],
+            "organizacion": response_service[0]['organizacion']
+        }
+    )
+    if response_update_service is None:
+        logger.error("No se puedo actualizar el estado del servicio de Estado de pedimento ")
+        raise HTTPException(status_code=500, detail="Error al actualizar el estado del servicio de estado de pedimento")
+
+    try:
+        response_credentials = await rest_controller.get_vucem_credentials(
+            response_service['pedimento']['contribuyente']
+        )
+    except Exception as e:
+        logger.error(f"Error al obtener credenciales VUCEM: {e}")
+        await _update_service_status(response_service['id'], ESTADO_ERROR, response_service)
+        raise HTTPException(status_code=500, detail="Error al obtener credenciales VUCEM")
+    
+    if not response_put_service or not response_credentials:
+        await _update_service_status(response_service['id'], ESTADO_ERROR, response_service)
+        raise HTTPException(status_code=500, detail="Error al actualizar el servicio de pedimento o obtener credenciales")
+
+    logger.info("Credenciales obtenidas exitosamente")
+    # Procesar petición SOAP para obtener pedimento completo
+    try:
+        get_pedimento_completo_response = await get_soap_pedimento_completo(
+            credenciales=response_credentials[0],
+            response_service=response_service,
+            soap_controller=soap_controller
+        )
+    except Exception as e:
+        logger.error(f"Error en petición SOAP: {e}")
+        await _update_service_status(response_service['id'], ESTADO_ERROR, response_service)
+        raise HTTPException(status_code=500, detail="Error en la petición SOAP al servicio VUCEM")
+
+@router.post("/services/listar_pedimentos")# Sin testear
+async def get_listar_pedimentos(request: ServiceBaseSchema):
+    pass
+
+@router.post("/services/pedimento_completo") # Testeado 
 async def get_pedimento_completo(request: ServiceBaseSchema):
     response_service = None
     try:
@@ -196,8 +248,9 @@ async def get_pedimento_completo(request: ServiceBaseSchema):
             response_service_1 = await rest_controller.post_pedimento_service(new_service)
             new_service['servicio'] = 4
             response_service_4 = await rest_controller.post_pedimento_service(new_service)
-            new_service['servicio'] = 5
-            response_service_5 = await rest_controller.post_pedimento_service(new_service)
+            if xml_content.get('remesas', 0):
+                new_service['servicio'] = 5
+                response_service_5 = await rest_controller.post_pedimento_service(new_service)
             new_service['servicio'] = 6
             response_service_6 = await rest_controller.post_pedimento_service(new_service)
             new_service['servicio'] = 7
@@ -236,49 +289,7 @@ async def get_pedimento_completo(request: ServiceBaseSchema):
         
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
-@router.post("/services/remesas")
-async def get_remesas(request: ServiceRemesaSchema):
-    request_data = request.model_dump()
-
-    if not request_data.get('pedimento'):
-        raise HTTPException(status_code=400, detail="ID del pedimento es requerido")
-    if not request_data.get('organizacion'):
-        raise HTTPException(status_code=400, detail="ID de la organización es requerido")
-
-    try:
-        response_service = await rest_controller.get_pedimento_services(request_data.get('pedimento'), service_type=5)
-    except Exception as e:
-        logger.error(f"Error al obtener servicios de remesas: {e}")
-        raise HTTPException(status_code=500, detail="Error al obtener servicios de remesas")
-
-    try:
-        response_credentials = await rest_controller.get_vucem_credentials(
-            response_service[0].get('pedimento', {}).get('contribuyente', '')
-        )
-    except Exception as e:
-        logger.error(f"Error al obtener credenciales VUCEM: {e}")
-        raise HTTPException(status_code=500, detail="Error al obtener credenciales VUCEM")
-    
-    if not response_service or not response_credentials:
-        raise HTTPException(status_code=500, detail="Error al obtener servicios de remesas o credenciales VUCEM")
-
-    logger.info(f"Servicios de remesas obtenidos exitosamente: {response_service}")
-
-
-    soap_response = await get_soap_remesas(
-        credenciales=response_credentials[0],
-        response_service=response_service[0],
-        soap_controller=soap_controller
-    )
-
-
-
-
-    
-    
-    return soap_response
-
-@router.post("/services/partidas")
+@router.post("/services/partidas") # Testeado
 async def get_partidas(request: ServiceRemesaSchema):
     request_data = request.model_dump()
 
@@ -293,6 +304,17 @@ async def get_partidas(request: ServiceRemesaSchema):
         logger.error(f"Error al obtener servicios de partidas: {e}")
         raise HTTPException(status_code=500, detail="Error al obtener servicios de partidas")
 
+    response_update_service = rest_controller.put_pedimento_service(
+        service_id=response_service[0]['id'],
+        data={
+            "estado": ESTADO_EN_PROCESO,
+            "pedimento": response_service[0]['pedimento']['id'],
+            "organizacion": response_service[0]['organizacion']
+        }
+    )
+    if response_update_service is None:
+        logger.error("No se pudo actualizar el estado del servicio de partidas")
+        raise HTTPException(status_code=500, detail="Error al actualizar el estado del servicio de partidas")
     
     try:
         response_credentials = await rest_controller.get_vucem_credentials(
@@ -312,18 +334,359 @@ async def get_partidas(request: ServiceRemesaSchema):
                 partida=str(partida)
             )
             partidas.append(partida)
+
+    if not partidas:
+        logger.error("No se encontraron partidas para el pedimento")
+        finish_service = await rest_controller.put_pedimento_service(
+            service_id=response_service[0]['id'],
+            data={
+                "estado": ESTADO_ERROR,
+                "pedimento": response_service[0]['pedimento']['id'],
+                "organizacion": response_service[0]['organizacion']
+            }
+        )
+        raise HTTPException(status_code=404, detail="No se encontraron partidas para el pedimento")
     
-    response_service[0]['partidas'] = partidas
-    return response_service
+    logger.info(f"Partidas obtenidas exitosamente: {partidas}")
+    # Actualizar el estado del servicio a finalizado
+    finish_service = await rest_controller.put_pedimento_service(
+        service_id=response_service[0]['id'],
+        data={
+            "estado": ESTADO_FINALIZADO,
+            "pedimento": response_service[0]['pedimento']['id'],
+            "organizacion": response_service[0]['organizacion']
+        }
+    )
 
-@router.post("/pedimentos/estado_pedimento")
-async def get_estado_pedimento(request: PedimentoRequest):
-    pass
+    return_data = {
+        "organizacion": response_service[0]['organizacion'],
+        "servicio": response_service[0]['id'],
+        "estado": ESTADO_FINALIZADO,
+        "partidas": partidas,
+    }
 
-@router.post("/pedimentos/coves")
+    return return_data
+
+@router.post("/services/remesas") # Testeado
+async def get_remesas(request: ServiceRemesaSchema):
+    request_data = request.model_dump()
+
+    if not request_data.get('pedimento'):
+        raise HTTPException(status_code=400, detail="ID del pedimento es requerido")
+    if not request_data.get('organizacion'):
+        raise HTTPException(status_code=400, detail="ID de la organización es requerido")
+
+    try:
+        response_service = await rest_controller.get_pedimento_services(request_data.get('pedimento'), service_type=5)
+    except Exception as e:
+        logger.error(f"Error al obtener servicios de remesas: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener servicios de remesas")
+
+    
+    response_update_service = rest_controller.put_pedimento_service(
+        service_id=response_service[0]['id'],
+        data={
+            "estado": ESTADO_EN_PROCESO,
+            "pedimento": response_service[0]['pedimento']['id'],
+            "organizacion": response_service[0]['organizacion']
+        }
+    )
+    if response_update_service is None:
+        logger.error("No se pudo actualizar el estado del servicio de remesas")
+        raise HTTPException(status_code=500, detail="Error al actualizar el estado del servicio de remesas")
+    
+    try:
+        response_credentials = await rest_controller.get_vucem_credentials(
+            response_service[0].get('pedimento', {}).get('contribuyente', '')
+        )
+    except Exception as e:
+        logger.error(f"Error al obtener credenciales VUCEM: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener credenciales VUCEM")
+    
+    if not response_service or not response_credentials:
+        raise HTTPException(status_code=500, detail="Error al obtener servicios de remesas o credenciales VUCEM")
+
+    logger.info(f"Servicios de remesas obtenidos exitosamente: {response_service}")
+
+    soap_response = await get_soap_remesas(
+        credenciales=response_credentials[0],
+        response_service=response_service[0],
+        soap_controller=soap_controller
+    )
+
+    if soap_response is None:
+        logger.error("No se pudo obtener la respuesta SOAP para remesas")
+        finish_service = await rest_controller.put_pedimento_service(
+            service_id=response_service[0]['id'],
+            data={
+                "estado": ESTADO_ERROR,
+                "pedimento": response_service[0]['pedimento']['id'],
+                "organizacion": response_service[0]['organizacion']
+            }
+        )
+        if finish_service is None:
+            logger.error("No se pudo actualizar el estado del servicio de remesas a error")
+        raise HTTPException(status_code=500, detail="Error al obtener la respuesta SOAP para remesas")
+    
+    logger.info("Respuesta SOAP para remesas obtenida exitosamente")
+    # Actualizar el estado del servicio a finalizado
+    finish_service = await rest_controller.put_pedimento_service(
+        service_id=response_service[0]['id'],
+        data={
+            "estado": ESTADO_FINALIZADO,
+            "pedimento": response_service[0]['pedimento']['id'],
+            "organizacion": response_service[0]['organizacion']
+        }
+    )
+    if finish_service is None:
+        logger.error("No se pudo actualizar el estado del servicio de remesas a finalizado")
+        raise HTTPException(status_code=500, detail="Error al finalizar el servicio de remesas")
+    
+    logger.info("Estado del servicio de remesas actualizado a finalizado")
+
+    return_data = {
+        "organizacion": response_service[0]['organizacion'],
+        "servicio": response_service[0]['id'],
+        "estado": ESTADO_FINALIZADO,
+        "datos": soap_response,
+    }
+    return JSONResponse(
+        content=return_data,
+        status_code=200
+    )
+
+@router.post("/services/acuse") # Testeado
+async def get_acuse(request: ServiceRemesaSchema):
+
+    """
+    Endpoint para obtener el acuse de un pedimento.
+    
+    Args:
+        request: PedimentoRequest con los datos del pedimento.
+        
+    Returns:
+        JSONResponse con el acuse del pedimento.
+    """
+
+    request_data = request.model_dump()
+
+    if not request_data.get('pedimento'):
+        raise HTTPException(status_code=400, detail="ID del pedimento es requerido")
+    if not request_data.get('organizacion'):
+        raise HTTPException(status_code=400, detail="ID de la organización es requerido")
+
+    try:
+        response_service = await rest_controller.get_pedimento_services(request_data.get('pedimento'), service_type=6)
+    except Exception as e:
+        logger.error(f"Error al obtener servicios de remesas: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener servicios de remesas")
+
+    response_update_service = rest_controller.put_pedimento_service(
+        service_id=response_service[0]['id'],
+        data={
+            "estado": ESTADO_EN_PROCESO,
+            "pedimento": response_service[0]['pedimento']['id'],
+            "organizacion": response_service[0]['organizacion']
+        }
+    )
+    if response_update_service is None:
+        logger.error("No se pudo actualizar el estado del servicio de remesas")
+        raise HTTPException(status_code=500, detail="Error al actualizar el estado del servicio de remesas")
+    
+    try:
+        response_credentials = await rest_controller.get_vucem_credentials(
+            response_service[0].get('pedimento', {}).get('contribuyente', '')
+        )
+    except Exception as e:
+        logger.error(f"Error al obtener credenciales VUCEM: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener credenciales VUCEM")
+
+    
+    try:
+        edocs = await rest_controller.get_edocs(response_service[0]['pedimento']['id'])
+    except Exception as e:
+        logger.error(f"Error al obtener documentos digitalizados: {e}")
+        finish_service = await rest_controller.put_pedimento_service(
+            service_id=response_service[0]['id'],
+            data={
+                "estado": ESTADO_ERROR,
+                "pedimento": response_service[0]['pedimento']['id'],
+                "organizacion": response_service[0]['organizacion']
+            }
+        )
+        edocs = []
+    finish_edocs = []
+    for idx, edoc in enumerate(edocs):
+        if edoc.get('numero_edocument'):
+            response_acuse = await get_soap_acuse(
+                credenciales=response_credentials[0],
+                response_service=response_service[0],
+                soap_controller=soap_controller,
+                edocument=edoc,
+                idx=idx + 1
+            )
+
+            finish_edocs.append({
+                "clave": edoc['clave'],
+                "descripcion": edoc['descripcion'],
+                "numero_edocument": edoc['numero_edocument']
+            })
+    
+    if not finish_edocs:
+        logger.error("No se encontraron documentos digitalizados para el pedimento")
+        finish_service = await rest_controller.put_pedimento_service(
+            service_id=response_service[0]['id'],
+            data={
+                "estado": ESTADO_ERROR,
+                "pedimento": response_service[0]['pedimento']['id'],
+                "organizacion": response_service[0]['organizacion']
+            }
+        )
+        raise HTTPException(status_code=404, detail="No se encontraron documentos digitalizados para el pedimento")
+    logger.info(f"Documentos digitalizados obtenidos exitosamente: {finish_edocs}")
+    # Actualizar el estado del servicio a finalizado
+    finish_service = await rest_controller.put_pedimento_service(
+        service_id=response_service[0]['id'],
+        data={
+            "estado": ESTADO_FINALIZADO,
+            "pedimento": response_service[0]['pedimento']['id'],
+            "organizacion": response_service[0]['organizacion']
+        }
+    )
+    if finish_service is None:
+        logger.error("No se pudo actualizar el estado del servicio de remesas a finalizado")
+        raise HTTPException(status_code=500, detail="Error al finalizar el servicio de remesas")
+    
+    logger.info("Estado del servicio de remesas actualizado a finalizado")
+
+    return_data = {
+        "organizacion": response_service[0]['organizacion'],
+        "servicio": response_service[0]['id'],
+        "estado": ESTADO_FINALIZADO,
+        "edocumentos": finish_edocs,
+    }
+
+    return JSONResponse(
+        content=return_data,
+        status_code=200
+    )
+
+@router.post("/pedimentos/edocument") # Sin testear
+async def get_edocument(request: PedimentoRequest):
+    """
+    Endpoint para obtener el acuse de un pedimento.
+    
+    Args:
+        request: PedimentoRequest con los datos del pedimento.
+        
+    Returns:
+        JSONResponse con el acuse del pedimento.
+    """
+
+    request_data = request.model_dump()
+
+    if not request_data.get('pedimento'):
+        raise HTTPException(status_code=400, detail="ID del pedimento es requerido")
+    if not request_data.get('organizacion'):
+        raise HTTPException(status_code=400, detail="ID de la organización es requerido")
+
+    try:
+        response_service = await rest_controller.get_pedimento_services(request_data.get('pedimento'), service_type=7)
+    except Exception as e:
+        logger.error(f"Error al obtener servicios de remesas: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener servicios de remesas")
+
+    response_update_service = rest_controller.put_pedimento_service(
+        service_id=response_service[0]['id'],
+        data={
+            "estado": ESTADO_EN_PROCESO,
+            "pedimento": response_service[0]['pedimento']['id'],
+            "organizacion": response_service[0]['organizacion']
+        }
+    )
+    if response_update_service is None:
+        logger.error("No se pudo actualizar el estado del servicio de remesas")
+        raise HTTPException(status_code=500, detail="Error al actualizar el estado del servicio de remesas")
+    
+    try:
+        response_credentials = await rest_controller.get_vucem_credentials(
+            response_service[0].get('pedimento', {}).get('contribuyente', '')
+        )
+    except Exception as e:
+        logger.error(f"Error al obtener credenciales VUCEM: {e}")
+        raise HTTPException(status_code=500, detail="Error al obtener credenciales VUCEM")
+
+    
+    try:
+        edocs = await rest_controller.get_edocs(response_service[0]['pedimento']['id'])
+    except Exception as e:
+        logger.error(f"Error al obtener documentos digitalizados: {e}")
+        finish_service = await rest_controller.put_pedimento_service(
+            service_id=response_service[0]['id'],
+            data={
+                "estado": ESTADO_ERROR,
+                "pedimento": response_service[0]['pedimento']['id'],
+                "organizacion": response_service[0]['organizacion']
+            }
+        )
+        edocs = []
+    finish_edocs = []
+    for idx, edoc in enumerate(edocs):
+        if edoc.get('numero_edocument'):
+            response_acuse = await get_soap_acuse(
+                credenciales=response_credentials[0],
+                response_service=response_service[0],
+                soap_controller=soap_controller,
+                edocument=edoc,
+                idx=idx + 1
+            )
+
+            finish_edocs.append({
+                "clave": edoc['clave'],
+                "descripcion": edoc['descripcion'],
+                "numero_edocument": edoc['numero_edocument']
+            })
+    
+    if not finish_edocs:
+        logger.error("No se encontraron documentos digitalizados para el pedimento")
+        finish_service = await rest_controller.put_pedimento_service(
+            service_id=response_service[0]['id'],
+            data={
+                "estado": ESTADO_ERROR,
+                "pedimento": response_service[0]['pedimento']['id'],
+                "organizacion": response_service[0]['organizacion']
+            }
+        )
+        raise HTTPException(status_code=404, detail="No se encontraron documentos digitalizados para el pedimento")
+    logger.info(f"Documentos digitalizados obtenidos exitosamente: {finish_edocs}")
+    # Actualizar el estado del servicio a finalizado
+    finish_service = await rest_controller.put_pedimento_service(
+        service_id=response_service[0]['id'],
+        data={
+            "estado": ESTADO_FINALIZADO,
+            "pedimento": response_service[0]['pedimento']['id'],
+            "organizacion": response_service[0]['organizacion']
+        }
+    )
+    if finish_service is None:
+        logger.error("No se pudo actualizar el estado del servicio de remesas a finalizado")
+        raise HTTPException(status_code=500, detail="Error al finalizar el servicio de remesas")
+    
+    logger.info("Estado del servicio de remesas actualizado a finalizado")
+
+    return_data = {
+        "organizacion": response_service[0]['organizacion'],
+        "servicio": response_service[0]['id'],
+        "estado": ESTADO_FINALIZADO,
+        "edocumentos": finish_edocs,
+    }
+
+    return JSONResponse(
+        content=return_data,
+        status_code=200
+    )
+
+@router.post("/pedimentos/coves") # Sin Testear
 async def get_cove(request: PedimentoRequest):
     pass
 
-@router.post("/pedimentos/edocument")
-async def get_edocument(request: PedimentoRequest):
-    pass

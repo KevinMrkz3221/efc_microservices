@@ -80,19 +80,6 @@ class XMLScraper:
         
         return max(partidas_values) if partidas_values else None
 
-    def _get_edocument(self, root: ET.Element) -> str:
-        """
-        Método para obtener el e-document del XML.
-        
-        Args:
-            root: Elemento raíz del XML.
-        
-        Returns:
-            E-document como string.
-        """
-        edocument = root.find('.//ns2:edocument', namespaces={'ns2': 'http://www.ventanillaunica.gob.mx/pedimentos/ws/oxml/consultarpedimentocompleto'})
-        return edocument.text if edocument is not None else None
-
     def _get_identificadores_ed(self, root: ET.Element) -> list:
         """
         Método para obtener todos los identificadores con clave 'ED' del XML.
@@ -180,6 +167,19 @@ class XMLScraper:
         print("No se encontraron remesas (sin identificadores RC)")
         return False
 
+    def _get_tipo_operacion(self, root: ET.Element) -> str:
+        """
+        Método para obtener el tipo de operación del XML.
+        
+        Args:
+            root: Elemento raíz del XML.
+        
+        Returns:
+            Tipo de operación como string.
+        """
+        tipo_operacion = root.find('.//ns2:tipoOperacion/ns2:clave', namespaces={'ns2': 'http://www.ventanillaunica.gob.mx/pedimentos/ws/oxml/consultarpedimentocompleto'})
+        return tipo_operacion.text if tipo_operacion is not None else None
+    
     def extract_data(self, xml_content: str) -> dict:
         """
         Método para extraer datos específicos del XML.
@@ -203,6 +203,7 @@ class XMLScraper:
             data['numero_partidas'] = self._get_partidas(root)
             data['identificadores_ed'] = self._get_identificadores_ed(root)
             data['remesas'] = self._remesas(root)
+            data['tipo_operacion'] = self._get_tipo_operacion(root)
 
             # Verificar que se extrajeron los datos esenciales
             if not any([data['numero_operacion'], data['pedimento'], data['curp_apoderado'], data['agente_aduanal']]):

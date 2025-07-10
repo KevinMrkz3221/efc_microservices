@@ -82,35 +82,65 @@ class APIController:
         """
         return await self._make_request_async('PUT', f'customs/pedimentos/{pedimento_id}/', data=data)
 
-    async def post_document(self, soap_response, organizacion: str, pedimento: str, file_name: str = None) -> Dict[str, Any]:
+    async def post_document(self, soap_response=None, organizacion: str = None, pedimento: str = None, file_name: str = None, document_type: int = 2, binary_content: bytes = None) -> Dict[str, Any]:
         """
-        Método para enviar una respuesta SOAP como documento archivo a la API.
+        Método para enviar documentos (XML, PDF, etc.) a la API.
         
         Args:
-            soap_response: Respuesta del servicio SOAP
+            soap_response: Respuesta del servicio SOAP (para archivos XML)
             organizacion: UUID de la organización (requerido)
             pedimento: UUID del pedimento (requerido)
-            file_name: Nombre del archivo (opcional, se genera automáticamente)
+            file_name: Nombre del archivo con extensión (requerido)
+            document_type: Tipo de documento
+            binary_content: Contenido binario del archivo (para PDFs, etc.)
         """
         import datetime
         import tempfile
+        import mimetypes
         
-        if not soap_response:
-            print("Error: No hay respuesta SOAP para enviar")
+        if not soap_response and not binary_content:
+            print("Error: Debe proporcionar soap_response o binary_content")
             return None
+            
+        if not file_name:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_name = f"documento_{timestamp}.bin"
         
         try:
-            # Generar nombre de archivo si no se especifica
-            if not file_name:
-                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                file_name = f"pedimento_{pedimento}.xml"
+            # Extraer extensión del nombre del archivo
+            file_extension = os.path.splitext(file_name)[1].lstrip('.').lower()
+            if not file_extension:
+                file_extension = 'bin'  # Extensión por defecto
             
-            # Asegurar que termine en .xml
-            if not file_name.endswith('.xml'):
-                file_name += '.xml'
+            # Determinar Content-Type basado en la extensión
+            content_type_map = {
+                'xml': 'application/xml',
+                'pdf': 'application/pdf',
+                'jpg': 'image/jpeg',
+                'jpeg': 'image/jpeg',
+                'png': 'image/png',
+                'zip': 'application/zip',
+                'doc': 'application/msword',
+                'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'xls': 'application/vnd.ms-excel',
+                'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            }
             
-            # Crear archivo temporal
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.xml', delete=False, encoding='utf-8') as temp_file:
+            content_type = content_type_map.get(file_extension, 'application/octet-stream')
+            
+            # Determinar modo de archivo y contenido
+            if binary_content:
+                # Para archivos binarios (PDFs, imágenes, etc.)
+                file_mode = 'wb'
+                temp_suffix = f'.{file_extension}'
+                content = binary_content
+                is_binary = True
+            else:
+                # Para archivos de texto (XML)
+                file_mode = 'w'
+                temp_suffix = f'.{file_extension}'
+                is_binary = False
+                
                 # Obtener contenido de la respuesta SOAP
                 if hasattr(soap_response, 'content'):
                     content = soap_response.content.decode('utf-8')
@@ -118,7 +148,10 @@ class APIController:
                     content = soap_response.text
                 else:
                     content = str(soap_response)
-                
+            
+            # Crear archivo temporal con la extensión correcta
+            encoding = None if is_binary else 'utf-8'
+            with tempfile.NamedTemporaryFile(mode=file_mode, suffix=temp_suffix, delete=False, encoding=encoding) as temp_file:
                 temp_file.write(content)
                 temp_file_path = temp_file.name
             
@@ -129,13 +162,13 @@ class APIController:
             
             # Calcular tamaño del archivo
             file_size = os.path.getsize(temp_file_path)
-            print(temp_file_path)
-            # Preparar datos del documento (estos van en el body como form-data)
+            
+            # Preparar datos del documento
             document_data = {
                 'organizacion': organizacion,
                 'pedimento': pedimento,
-                'extension': 'xml',  # Asumimos que es XML
-                'document_type': 2,
+                'extension': file_extension,
+                'document_type': document_type,
                 'size': file_size
             }
             
@@ -147,7 +180,7 @@ class APIController:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 with open(temp_file_path, 'rb') as file:
                     files = {
-                        'archivo': (file_name, file.read(), 'application/xml')
+                        'archivo': (file_name, file.read(), content_type)
                     }
                     
                     response = await client.post(
@@ -163,11 +196,11 @@ class APIController:
             response.raise_for_status()
             result = response.json()
             
-            print(f"Documento XML enviado exitosamente: {file_name} (tamaño: {file_size} bytes)")
+            print(f"Documento {file_extension.upper()} enviado exitosamente: {file_name} (tamaño: {file_size} bytes)")
             return result
             
         except Exception as e:
-            print(f"Error al enviar documento SOAP: {e}")
+            print(f"Error al enviar documento: {e}")
             # Limpiar archivo temporal en caso de error
             if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
                 os.unlink(temp_file_path)
@@ -182,6 +215,15 @@ class APIController:
         """
         return await self._make_request_async('POST', 'customs/edocuments/', data=data)
 
+    async def get_edocs(self, pedimento: str) -> List[Dict[str, Any]]:
+        """
+        Método para obtener los documentos digitalizados de un pedimento.
+        
+        Args:
+            pedimento: UUID del pedimento a consultar
+        """
+        return await self._make_request_async('GET', f'customs/edocuments/?pedimento={pedimento}')
+    
     async def _make_request_async(self, method: str, endpoint: str, data=None):
         """
         Método asíncrono para hacer peticiones a la API usando httpx.
