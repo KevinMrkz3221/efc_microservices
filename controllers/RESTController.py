@@ -224,6 +224,16 @@ class APIController:
         """
         return await self._make_request_async('GET', f'customs/edocuments/?pedimento={pedimento}')
     
+    async def put_edocument(self, edocument_id: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Método para actualizar un documento digitalizado en la API.
+        
+        Args:
+            edocument_id: UUID del documento a actualizar
+            data: Diccionario con los datos a actualizar
+        """
+        return await self._make_request_async('PUT', f'customs/edocuments/{edocument_id}/', data=data)
+
     async def _make_request_async(self, method: str, endpoint: str, data=None):
         """
         Método asíncrono para hacer peticiones a la API usando httpx.

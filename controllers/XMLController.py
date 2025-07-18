@@ -1,8 +1,9 @@
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
+# Pedimento Completo
 @dataclass
-class XMLScraper:
+class XMLScraper: # Clase me extrae datos de Pedimento
     """
     Clase para manejar la extracción de datos de un XML.
     """
@@ -219,5 +220,12 @@ class XMLScraper:
             return {}
 
         return extract_xml_data(xml_content)
+
+
+class XMLControllerRemesas:
+    pass
+
+class XMLControllerPartidas:
+    pass
 
 xml_controller = XMLScraper()

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 from controllers.XMLController import xml_controller
 
 
-def validate_pedimento_data(response_service: Dict[str, Any], credenciales: Dict[str, Any]) -> tuple:
+def validate_pedimento_data(response_service: Dict[str, Any], credenciales: Dict[str, Any]) -> tuple: # Testeado
     """
     Valida y extrae los datos necesarios para la petición SOAP.
     
@@ -49,7 +49,7 @@ def validate_pedimento_data(response_service: Dict[str, Any], credenciales: Dict
     
     return username, password, aduana, patente, pedimento, numero_operacion
 
-def extract_acuse_documento_from_soap(soap_response_text):
+def extract_acuse_documento_from_soap(soap_response_text): # Testeado
     """
     Extrae el contenido del tag <acuseDocumento> de la respuesta SOAP multipart.
     
@@ -103,7 +103,38 @@ def extract_acuse_documento_from_soap(soap_response_text):
         logger.error(f"Error extrayendo acuseDocumento: {e}")
         return None
 
-def decode_acuse_base64_content(base64_content):
+def extract_pdf_bytes_from_xml(xml_path):
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    # Busca el tag <File> (ajusta el namespace si es necesario)
+    file_elem = root.find('.//File')
+    if file_elem is not None and file_elem.text:
+        # Limpia el contenido base64
+        base64_data = file_elem.text.strip().replace('\n', '').replace('\r', '')
+        pdf_bytes = base64.b64decode(base64_data)
+        cadena_original = None
+        sello_digital = None
+
+        # Buscar CadenaOriginal y SelloDigital en el XML
+        cadena_elem = root.find('.//CadenaOriginal')
+        if cadena_elem is not None and cadena_elem.text:
+            cadena_original = cadena_elem.text.strip()
+
+        sello_elem = root.find('.//SelloDigital')
+        if sello_elem is not None and sello_elem.text:
+            sello_digital = sello_elem.text.strip()
+
+        return {
+            "pdf_bytes": pdf_bytes,
+            "cadena_original": cadena_original,
+            "sello_digital": sello_digital
+        }
+        return pdf_bytes
+    
+    else:
+        raise ValueError("No se encontró el tag <File> con contenido válido.")
+
+def decode_acuse_base64_content(base64_content): # Testeado
     """
     Decodifica el contenido Base64 del acuse y limpia caracteres especiales.
     
@@ -154,7 +185,7 @@ def decode_acuse_base64_content(base64_content):
             logger.error(f"Error también con validación relajada: {e2}")
             return None
 
-def soap_error(soap_response):
+def soap_error(soap_response): # Testeado
     """
     Verifica si la respuesta SOAP no contiene errores.
     
@@ -170,7 +201,7 @@ def soap_error(soap_response):
     # Aquí podrías agregar más lógica para verificar errores específicos en el XML
     return False
 
-async def get_soap_pedimento_completo(credenciales, response_service, soap_controller):
+async def get_soap_pedimento_completo(credenciales, response_service, soap_controller): # Testeado
     """
     Procesa la petición SOAP para obtener el pedimento completo y guarda el documento.
     
@@ -259,7 +290,7 @@ async def get_soap_pedimento_completo(credenciales, response_service, soap_contr
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error interno al procesar pedimento completo: {str(e)}")
 
-async def get_soap_remesas(credenciales, response_service, soap_controller):
+async def get_soap_remesas(credenciales, response_service, soap_controller): # Testeado
     """
     Procesa la petición SOAP para obtener remesas y guarda el documento.
     
@@ -346,7 +377,7 @@ async def get_soap_remesas(credenciales, response_service, soap_controller):
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error interno al procesar remesas: {str(e)}")
 
-async def get_soap_partidas(credenciales, response_service, soap_controller, partida):
+async def get_soap_partidas(credenciales, response_service, soap_controller, partida): # Testeado
     """
     Procesa la petición SOAP para obtener partidas de un pedimento y guarda el documento.
     
@@ -406,6 +437,19 @@ async def get_soap_partidas(credenciales, response_service, soap_controller, par
             
             _file_name = f"vu_PT_{remesas}{no_partidas}{tipo_operacion}_{aduana}_{patente}_{pedimento}_{partida}.xml"
             
+
+            # Aqui entra proceso de alonso
+
+            # respuesta = scraping_partida(xml)
+
+            # 1. Leer XML
+            
+            # 2. Obtener Datos del XML
+
+            # 3. Subir los datos a la base datos 
+
+            # 4. Generar una respues 
+
             # Enviar el documento XML como respuesta
             document_response = await rest_controller.post_document(
                 soap_response=soap_response,
@@ -419,8 +463,8 @@ async def get_soap_partidas(credenciales, response_service, soap_controller, par
 
             return {
                 "servicio": response_service, 
-                "documento": document_response
-
+                "documento": document_response,
+                "respuesta": respuesta
             }
         else:
             logger.error("Error en petición SOAP")
@@ -434,7 +478,7 @@ async def get_soap_partidas(credenciales, response_service, soap_controller, par
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error interno al procesar partidas: {str(e)}")
 
-async def get_soap_acuse(credenciales, response_service, soap_controller, edocument, idx):
+async def get_soap_acuse(credenciales, response_service, soap_controller, edocument, idx): # Testeado
     """
     Procesa la petición SOAP para obtener el acuse de un pedimento y guarda el documento.
     
@@ -538,7 +582,7 @@ async def get_soap_acuse(credenciales, response_service, soap_controller, edocum
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error interno al procesar acuse: {str(e)}")
 
-async def get_estado_pedimento(credenciales, response_service, soap_controller):
+async def get_estado_pedimento(credenciales, response_service, soap_controller): # Sin testear
     try:
         # Extraer credenciales
         username, password, aduana, patente, pedimento, numero_operacion = validate_pedimento_data(response_service, credenciales)
@@ -564,7 +608,7 @@ async def get_estado_pedimento(credenciales, response_service, soap_controller):
         }
         
         soap_response = await soap_controller.make_request_async(
-            "webservice-pedimentos-HA/consultarEstadoPedimento", 
+            "webservice-pedimentos-HA/consultarEstadoPedimento?wsdl", 
             data=soap_xml,
             headers=soap_headers
         )
@@ -652,8 +696,8 @@ async def get_soap_edocument(credenciales, response_service, soap_controller, ed
             'Accept-Encoding': 'gzip,deflate',
         }
         
-        soap_response = await soap_controller.make_request_async(
-            "ventanilla-acuses-HA/ConsultaAcusesServiceWS?wsdl", 
+        soap_response = await soap_controller.make_request(
+            "Ventanilla-HA/ServicioEdocument/ServicioEdocument.svc", 
             data=soap_xml,
             headers=soap_headers
         )
@@ -663,18 +707,24 @@ async def get_soap_edocument(credenciales, response_service, soap_controller, ed
             logger.info(f"Petición SOAP exitosa - Status: {soap_response.status_code}")
 
             # Extraer contenido Base64 del acuse
-            logger.info("Extrayendo documento binario del acuse...")
-            acuse_base64 = extract_acuse_documento_from_soap(soap_response.text)
+            logger.info("Extrayendo documento binario del edocument...")
+            response = extract_pdf_bytes_from_xml(soap_response.text)
+            pdf_bytes = response.get('pdf_bytes')
+            # cadena_original = response.get('cadena_original')
+            # sello_digital = response.get('sello_digital')
 
-            
             if not acuse_base64:
                 logger.error("No se pudo extraer el contenido del acuseDocumento")
                 raise HTTPException(status_code=500, detail="No se pudo extraer el documento del acuse")
             
             # Decodificar contenido Base64
-            logger.info("Decodificando contenido Base64...")
-            pdf_bytes = decode_acuse_base64_content(acuse_base64)
-            
+
+            response_edoc = rest_controller.put_edocument(edocument_id=ide, data={
+                "numero_edocument": edocument['numero_edocument'],
+                "pedimento": response_service['pedimento'],
+                # "cadena_original": cadena_original,
+                # "sello_digital": sello_digital
+            })
             if not pdf_bytes:
                 logger.error("No se pudo decodificar el contenido Base64 del acuse")
                 raise HTTPException(status_code=500, detail="No se pudo decodificar el documento del acuse")
@@ -700,7 +750,7 @@ async def get_soap_edocument(credenciales, response_service, soap_controller, ed
                 organizacion=response_service['organizacion'],
                 pedimento=response_service['pedimento']['id'],
                 file_name=_file_name,
-                document_type=4
+                document_type=5
             )
             return {
                 "servicio": response_service,
@@ -717,3 +767,5 @@ async def get_soap_edocument(credenciales, response_service, soap_controller, ed
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Error interno al procesar acuse: {str(e)}")
+
+

@@ -14,11 +14,11 @@ class SOAPController:
         self.base_url = settings.SOAP_SERVICE_URL
         self.timeout = settings.TIMEOUT  # Timeout por default
 
-    def make_request(self, endpoint, data=None, headers=None, max_retries=5):
+    async def make_request(self, endpoint, data=None, headers=None, max_retries=5):
         intento = 0
         while intento < settings.MAX_RETRIES:
             try:
-                with httpx.Client(verify=settings.VERIFY_SSL, timeout=self.timeout) as client:
+                with httpx.Client(verify=settings.context, timeout=self.timeout) as client:
                     content = data.encode('utf-8') if data else None
                     response = client.post(
                         f"{self.base_url}/{endpoint}",
@@ -61,7 +61,7 @@ class SOAPController:
                         headers=headers
                     )
                     response.raise_for_status()
-                    return response  # ✅ éxito
+                    return response # ✅ éxito
             except Exception as e:
                 intento += 1
                 print(f"[{endpoint}] Error intento {intento}: {e}. Reintentando en {settings.WAIT_TIME}s...")
